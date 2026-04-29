@@ -42,6 +42,19 @@ async function joinQueue(req, res) {
       return res.status(400).json({ error: "service_id is required" });
     }
 
+    const existingEntry = await pool.query(
+      `SELECT id FROM queue_entries 
+       WHERE user_id = $1 AND service_id = $2 
+       AND status IN ('waiting', 'almost-ready')`,
+      [user_id, service_id]
+    );
+
+    if (existingEntry.rows.length > 0) {
+      return res.status(400).json({ 
+        error: "You are already in the queue for this service." 
+      });
+    }
+    
     const queueResult = await pool.query(
       `SELECT id FROM queues WHERE service_id = $1`,
       [service_id]

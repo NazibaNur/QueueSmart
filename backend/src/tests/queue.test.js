@@ -113,6 +113,20 @@ describe("POST /api/queue/join", () => {
 
     expect(res.statusCode).toBe(400)
   })
+  test("should return 400 if user tries to join the same queue twice", async () => {
+    await request(app)
+      .post("/api/queue/join")
+      .set("Authorization", `Bearer ${aliceToken}`)
+      .send({ service_id: "11111111-1111-1111-1111-111111111111" });
+  
+    const res = await request(app)
+      .post("/api/queue/join")
+      .set("Authorization", `Bearer ${aliceToken}`)
+      .send({ service_id: "11111111-1111-1111-1111-111111111111" });
+  
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toMatch(/already in the queue/i);
+  });
 })
 
 describe("DELETE /api/queue/leave/:service_id", () => {
