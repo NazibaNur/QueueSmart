@@ -167,6 +167,29 @@ describe("POST /api/queue/serve-next/:service_id", () => {
 
     expect(res.statusCode).toBe(403)
   })
+  test("should serve a user who is in 'almost-ready' status", async () => {
+    await seedQueueEntry(); //Alice joins (status: waiting)
+
+    // et the entry ID
+    const entries = await request(app)
+      .get("/api/queue")
+      .set("Authorization", `Bearer ${staffToken}`);
+    const entryId = entries.body[0].id;
+
+    //Set Alice to almost-ready
+    await request(app)
+      .patch(`/api/queue/status/${entryId}`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ status: "almost-ready" });
+
+    //Try to serve next
+    const res = await request(app)
+      .post("/api/queue/serve-next/11111111-1111-1111-1111-111111111111")
+      .set("Authorization", `Bearer ${staffToken}`);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.id).toBe(entryId);
+  })
 })
 
 describe("GET /api/queue", () => {

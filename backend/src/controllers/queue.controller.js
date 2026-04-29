@@ -113,7 +113,9 @@ async function leaveQueue(req, res) {
     const result = await pool.query(
       `UPDATE queue_entries
        SET status = 'left'
-       WHERE queue_id = $1 AND user_id = $2 AND status = 'waiting'
+       WHERE queue_id = $1 
+         AND user_id = $2 
+         AND status IN ('waiting', 'almost-ready')
        RETURNING *`,
       [queue_id, user_id]
     );
@@ -153,7 +155,8 @@ async function serveNext(req, res) {
 
     const result = await pool.query(
       `SELECT * FROM queue_entries
-       WHERE queue_id = $1 AND status = 'waiting'
+       WHERE queue_id = $1 
+       AND status IN ('waiting', 'almost-ready')
        ORDER BY position ASC
        LIMIT 1`,
       [queue_id]

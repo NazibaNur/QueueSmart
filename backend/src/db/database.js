@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Pool } = require("pg")
 
 const isTest = process.env.NODE_ENV === "test"
