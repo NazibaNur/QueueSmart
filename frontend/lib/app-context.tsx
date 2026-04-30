@@ -23,7 +23,8 @@ interface AppContextType {
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   register: (email: string, password: string, name: string, role: "user" | "staff" | "administrator") => Promise<{ success: boolean; error?: string }>
   logout: () => void
-  joinQueue: (serviceId: string) => Promise<void>
+  joinQueue: (serviceId: string, type?: "walk-in" | "appointment", appointmentTime?: string) => Promise<void>
+  toggleEmergency: (entryId: string) => Promise<void>
   leaveQueue: (entryId: string) => Promise<void>
   createService: (service: Omit<Service, "id" | "createdAt" | "isOpen">) => Promise<void>
   updateService: (id: string, updates: Partial<Service>) => Promise<void>
@@ -183,16 +184,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ─── Queue ────────────────────────────────────────────────────────────────
 
-  const joinQueue = useCallback(async (serviceId: string) => {
+  const joinQueue = useCallback(async (
+    serviceId: string,
+    type: "walk-in" | "appointment" = "walk-in",
+    appointmentTime?: string
+  ) => {
     if (!currentUser) return
     try {
-      await api.queue.join(serviceId)
+      await api.queue.join(serviceId, type, appointmentTime)
       await fetchQueue(currentUser)
       await fetchNotifications()
     } catch (err) {
       alert((err as Error).message ?? "Failed to join queue")
     }
   }, [currentUser, fetchQueue, fetchNotifications])
+
+  const toggleEmergency = useCallback(async (entryId: string) => {
+    if (!currentUser) return
+    try {
+      await api.queue.toggleEmergency(entryId)
+      await fetchQueue(currentUser)
+    } catch (err) {
+      alert((err as Error).message ?? "Failed to update emergency status")
+    }
+  }, [currentUser, fetchQueue])
 
   const leaveQueue = useCallback(async (entryId: string) => {
     if (!currentUser) return
@@ -388,6 +403,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         joinQueue,
+        toggleEmergency,
         leaveQueue,
         createService,
         updateService,

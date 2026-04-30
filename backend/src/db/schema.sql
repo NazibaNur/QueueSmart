@@ -36,16 +36,24 @@ CREATE TABLE IF NOT EXISTS queues (
 
 -- QueueEntry: users waiting in a queue
 CREATE TABLE IF NOT EXISTS queue_entries (
-  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  queue_id    UUID        NOT NULL REFERENCES queues(id) ON DELETE CASCADE,
-  service_id  UUID        NOT NULL REFERENCES services(id) ON DELETE CASCADE,
-  user_id     UUID        NOT NULL REFERENCES user_credentials(id) ON DELETE CASCADE,
-  position    INTEGER     NOT NULL,
-  status      VARCHAR(15) NOT NULL CHECK (status IN ('waiting', 'almost-ready', 'served', 'left')) DEFAULT 'waiting',
-  joined_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  served_at   TIMESTAMPTZ,
-  left_at     TIMESTAMPTZ
+  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  queue_id         UUID        NOT NULL REFERENCES queues(id) ON DELETE CASCADE,
+  service_id       UUID        NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  user_id          UUID        NOT NULL REFERENCES user_credentials(id) ON DELETE CASCADE,
+  position         INTEGER     NOT NULL,
+  status           VARCHAR(15) NOT NULL CHECK (status IN ('waiting', 'almost-ready', 'served', 'left')) DEFAULT 'waiting',
+  type             VARCHAR(15) NOT NULL CHECK (type IN ('walk-in', 'appointment')) DEFAULT 'walk-in',
+  is_emergency     BOOLEAN     NOT NULL DEFAULT FALSE,
+  appointment_time TIMESTAMPTZ,
+  joined_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  served_at        TIMESTAMPTZ,
+  left_at          TIMESTAMPTZ
 );
+
+-- Add new columns to existing installs
+ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS type VARCHAR(15) NOT NULL DEFAULT 'walk-in';
+ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS is_emergency BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS appointment_time TIMESTAMPTZ;
 
 -- Notifications
 CREATE TABLE IF NOT EXISTS notifications (

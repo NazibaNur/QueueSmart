@@ -10,6 +10,9 @@ function normalizeEntry(e) {
     userId: e.user_id,
     position: e.position,
     status: e.status,
+    type: e.type ?? "walk-in",
+    isEmergency: e.is_emergency ?? false,
+    appointmentTime: e.appointment_time ?? null,
     joinedAt: e.joined_at,
   }
 }
@@ -22,9 +25,14 @@ async function getQueue(req, res) {
        FROM queue_entries qe
        JOIN services s ON qe.service_id = s.id
        WHERE qe.status IN ('waiting', 'almost-ready')
-       ORDER BY qe.position ASC`
+       ORDER BY qe.is_emergency DESC,
+         CASE
+           WHEN qe.type = 'appointment' AND qe.appointment_time <= NOW() THEN 0
+           WHEN qe.type = 'walk-in' THEN 1
+           ELSE 2
+         END,
+         CASE WHEN qe.type = 'appointment' THEN qe.appointment_time ELSE qe.joined_at END ASC`
     );
-
     res.json(result.rows.map(normalizeEntry));
   } catch (err) {
     console.error(err);
@@ -35,26 +43,33 @@ async function getQueue(req, res) {
 //JOIN QUEUE
 async function joinQueue(req, res) {
   try {
-    const user_id = req.user.id; 
-    const { service_id } = req.body; 
+    const user_id = req.user.id;
+    const { service_id, type = "walk-in", appointment_time } = req.body;
 
     if (!service_id) {
       return res.status(400).json({ error: "service_id is required" });
     }
 
+    if (type !== "walk-in" && type !== "appointment") {
+      return res.status(400).json({ error: "type must be 'walk-in' or 'appointment'" });
+    }
+
+    if (type === "appointment" && !appointment_time) {
+      return res.status(400).json({ error: "appointment_time is required for appointments" });
+    }
+
     const existingEntry = await pool.query(
-      `SELECT id FROM queue_entries 
-       WHERE user_id = $1 AND service_id = $2 
+      `SELECT id FROM queue_entries
+       WHERE user_id = $1 AND service_id = $2
        AND status IN ('waiting', 'almost-ready')`,
       [user_id, service_id]
     );
 
     if (existingEntry.rows.length > 0) {
-      return res.status(400).json({ 
-        error: "You are already in the queue for this service." 
-      });
+      return res.status(400).json({ error: "You are already in the queue for this service." });
     }
-    
+
+
     const queueResult = await pool.query(
       `SELECT id FROM queues WHERE service_id = $1`,
       [service_id]
@@ -76,15 +91,19 @@ async function joinQueue(req, res) {
     const position = positionResult.rows[0].next_pos;
 
     const insertResult = await pool.query(
-      `INSERT INTO queue_entries (queue_id, service_id, user_id, position, status)
-       VALUES ($1, $2, $3, $4, 'waiting')
+      `INSERT INTO queue_entries (queue_id, service_id, user_id, position, status, type, appointment_time)
+       VALUES ($1, $2, $3, $4, 'waiting', $5, $6)
        RETURNING *`,
-      [queue_id, service_id, user_id, position]
+      [queue_id, service_id, user_id, position, type, appointment_time ?? null]
     );
 
     const serviceResult = await pool.query(`SELECT name FROM services WHERE id = $1`, [service_id]);
     const serviceName = serviceResult.rows[0]?.name ?? "the service";
-    await createNotification(user_id, "Joined Queue", `You are #${position} in line for ${serviceName}.`);
+
+    const notifMsg = type === "appointment"
+      ? `Your appointment for ${serviceName} is confirmed. You are #${position} in line.`
+      : `You are #${position} in line for ${serviceName}.`;
+    await createNotification(user_id, "Joined Queue", notifMsg);
 
     return res.status(201).json(normalizeEntry(insertResult.rows[0]));
   } catch (err) {
@@ -137,7 +156,7 @@ async function leaveQueue(req, res) {
   }
 }
 
-//SERVE NEXT USER
+//SERVE NEXT USER — priority: emergency → appointment due → walk-in → future appointment
 async function serveNext(req, res) {
   try {
     const { service_id } = req.params;
@@ -155,9 +174,16 @@ async function serveNext(req, res) {
 
     const result = await pool.query(
       `SELECT * FROM queue_entries
-       WHERE queue_id = $1 
+       WHERE queue_id = $1
        AND status IN ('waiting', 'almost-ready')
-       ORDER BY position ASC
+       ORDER BY
+         is_emergency DESC,
+         CASE
+           WHEN type = 'appointment' AND appointment_time <= NOW() THEN 0
+           WHEN type = 'walk-in' THEN 1
+           ELSE 2
+         END,
+         CASE WHEN type = 'appointment' THEN appointment_time ELSE joined_at END ASC
        LIMIT 1`,
       [queue_id]
     );
@@ -169,9 +195,7 @@ async function serveNext(req, res) {
     const entry = result.rows[0];
 
     await pool.query(
-      `UPDATE queue_entries
-       SET status = 'served'
-       WHERE id = $1`,
+      `UPDATE queue_entries SET status = 'served', served_at = NOW() WHERE id = $1`,
       [entry.id]
     );
 
@@ -180,17 +204,49 @@ async function serveNext(req, res) {
       [entry.user_id, entry.service_id, entry.joined_at]
     );
 
-    return res.json(entry);
+    await createNotification(entry.user_id, "It's Your Turn", "Please proceed to the service counter.");
+
+    return res.json(normalizeEntry(entry));
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Failed to serve next user" });
   }
 }
 
+//TOGGLE EMERGENCY — staff/admin marks a patient as emergency
+async function toggleEmergency(req, res) {
+  try {
+    const { entryId } = req.params;
+
+    const result = await pool.query(
+      `UPDATE queue_entries
+       SET is_emergency = NOT is_emergency
+       WHERE id = $1 AND status IN ('waiting', 'almost-ready')
+       RETURNING *`,
+      [entryId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Queue entry not found" });
+    }
+
+    const entry = result.rows[0];
+
+    if (entry.is_emergency) {
+      await createNotification(entry.user_id, "Priority Updated", "Your case has been marked as emergency and will be attended to immediately.");
+    }
+
+    return res.json(normalizeEntry(entry));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Failed to toggle emergency" });
+  }
+}
+
 //GET USER QUEUE
 async function getUserQueue(req, res) {
   try {
-    const user_id = req.user.id; // assuming verifyToken sets req.user
+    const user_id = req.user.id;
 
     const result = await pool.query(
       `SELECT qe.*, s.name AS service_name
@@ -238,10 +294,7 @@ async function updateStatus(req, res) {
     const { status } = req.body;
 
     const result = await pool.query(
-      `UPDATE queue_entries
-       SET status = $1
-       WHERE id = $2
-       RETURNING *`,
+      `UPDATE queue_entries SET status = $1 WHERE id = $2 RETURNING *`,
       [status, entryId]
     );
 
@@ -249,7 +302,7 @@ async function updateStatus(req, res) {
       return res.status(404).json({ error: "Entry not found" });
     }
 
-    res.json(result.rows[0]);
+    res.json(normalizeEntry(result.rows[0]));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update status" });
@@ -261,7 +314,6 @@ async function reorderQueue(req, res) {
     const { service_id } = req.params;
     const { entryId, direction } = req.body;
 
-    // simplistic swap logic (you can improve later)
     const current = await pool.query(
       `SELECT id, position FROM queue_entries WHERE id = $1`,
       [entryId]
@@ -297,9 +349,7 @@ async function removeEntry(req, res) {
     const { entryId } = req.params;
 
     const result = await pool.query(
-      `DELETE FROM queue_entries
-       WHERE id = $1
-       RETURNING *`,
+      `DELETE FROM queue_entries WHERE id = $1 RETURNING *`,
       [entryId]
     );
 
@@ -319,9 +369,10 @@ module.exports = {
   joinQueue,
   leaveQueue,
   serveNext,
+  toggleEmergency,
   getUserQueue,
   getWaitTime,
   updateStatus,
   reorderQueue,
-  removeEntry
+  removeEntry,
 };

@@ -25,6 +25,7 @@ export interface Service {
 }
 
 export type QueueStatus = "waiting" | "almost-ready" | "served" | "left"
+export type QueueEntryType = "walk-in" | "appointment"
 
 export interface QueueEntry {
   id: string
@@ -32,6 +33,9 @@ export interface QueueEntry {
   serviceId: string
   position: number
   status: QueueStatus
+  type: QueueEntryType
+  isEmergency: boolean
+  appointmentTime?: string
   joinedAt: string
   servedAt?: string
 }

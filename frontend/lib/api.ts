@@ -46,12 +46,17 @@ export const api = {
   queue: {
     getAll: () => apiFetch<unknown[]>("/queue"),
     getMy: () => apiFetch<unknown | null>("/queue/my"),
-    join: (serviceId: string) =>
-      apiFetch<unknown>("/queue/join", { method: "POST", body: JSON.stringify({ service_id: serviceId }) }),
+    join: (serviceId: string, type: "walk-in" | "appointment" = "walk-in", appointmentTime?: string) =>
+      apiFetch<unknown>("/queue/join", {
+        method: "POST",
+        body: JSON.stringify({ service_id: serviceId, type, appointment_time: appointmentTime }),
+      }),
     leave: (serviceId: string) =>
       apiFetch<unknown>(`/queue/leave/${serviceId}`, { method: "DELETE" }),
     serveNext: (serviceId: string) =>
       apiFetch<unknown>(`/queue/serve-next/${serviceId}`, { method: "POST" }),
+    toggleEmergency: (entryId: string) =>
+      apiFetch<unknown>(`/queue/emergency/${entryId}`, { method: "PATCH" }),
     updateStatus: (entryId: string, status: string) =>
       apiFetch<unknown>(`/queue/status/${entryId}`, {
         method: "PATCH",

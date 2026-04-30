@@ -7,15 +7,27 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { ChevronUp, ChevronDown, X, UserCheck, Users, UserPlus } from "lucide-react"
+import { ChevronUp, ChevronDown, X, UserCheck, Users, UserPlus, CalendarClock, Siren } from "lucide-react"
 import type { QueueStatus } from "@/lib/types"
 
 export function QueueManagement() {
-  const { services, getQueueForService, serveNextUser, setQueueEntryStatus, removeFromQueue, reorderQueue, getUserNameById } = useApp()
+  const {
+    services,
+    getQueueForService,
+    serveNextUser,
+    setQueueEntryStatus,
+    removeFromQueue,
+    reorderQueue,
+    toggleEmergency,
+    getUserNameById,
+  } = useApp()
   const [selectedServiceId, setSelectedServiceId] = useState(services[0]?.id ?? "")
 
   const selectedService = services.find((s) => s.id === selectedServiceId)
-  const queue = getQueueForService(selectedServiceId)
+  const queue = getQueueForService(selectedServiceId).sort((a, b) => {
+    if (a.isEmergency !== b.isEmergency) return a.isEmergency ? -1 : 1
+    return 0
+  })
 
   const statusLabels: Record<QueueStatus, string> = {
     waiting: "Waiting",
@@ -35,21 +47,19 @@ export function QueueManagement() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Queue Management</h1>
-        <p className="text-muted-foreground mt-1">View and manage queues for each location (Houston, Pasadena, Sugar Land).</p>
+        <p className="text-muted-foreground mt-1">View and manage patient queues. Mark emergencies to serve them first.</p>
       </div>
 
       {/* Service Selector */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-        <label className="text-sm font-medium text-foreground" id="service-select-label">Select Location</label>
+        <label className="text-sm font-medium text-foreground" id="service-select-label">Select Service</label>
         <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
           <SelectTrigger className="w-full sm:w-72" aria-labelledby="service-select-label">
-            <SelectValue placeholder="Choose location (Houston, Pasadena, Sugar Land)" />
+            <SelectValue placeholder="Choose a service" />
           </SelectTrigger>
           <SelectContent>
             {services.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name} ({s.zipCode})
-              </SelectItem>
+              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -61,15 +71,12 @@ export function QueueManagement() {
             <div>
               <CardTitle className="text-lg">{selectedService.name}</CardTitle>
               <CardDescription>
-                {queue.length} {queue.length === 1 ? "person" : "people"} in queue
+                {queue.length} {queue.length === 1 ? "patient" : "patients"} in queue
                 {!selectedService.isOpen && " (Queue closed)"}
               </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                onClick={() => serveNextUser(selectedServiceId)}
-                disabled={queue.length === 0}
-              >
+              <Button onClick={() => serveNextUser(selectedServiceId)} disabled={queue.length === 0}>
                 <UserCheck className="mr-2 h-4 w-4" />
                 Call next
               </Button>
@@ -89,7 +96,7 @@ export function QueueManagement() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                   <Users className="h-6 w-6 text-muted-foreground" />
                 </div>
-                <p className="text-sm text-muted-foreground">No one is currently in this queue.</p>
+                <p className="text-sm text-muted-foreground">No patients currently in this queue.</p>
               </div>
             ) : (
               <div className="overflow-x-auto -mx-6">
@@ -97,7 +104,8 @@ export function QueueManagement() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-16">#</TableHead>
-                      <TableHead>User</TableHead>
+                      <TableHead>Patient</TableHead>
+                      <TableHead>Type</TableHead>
                       <TableHead>Joined</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -105,11 +113,44 @@ export function QueueManagement() {
                   </TableHeader>
                   <TableBody>
                     {queue.map((entry, idx) => (
-                      <TableRow key={entry.id}>
+                      <TableRow
+                        key={entry.id}
+                        className={entry.isEmergency ? "bg-destructive/5" : undefined}
+                      >
                         <TableCell className="font-mono text-muted-foreground">{entry.position}</TableCell>
-                        <TableCell className="font-medium">{getUserNameById(entry.userId)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{getUserNameById(entry.userId)}</span>
+                            {entry.isEmergency && (
+                              <Badge className="bg-destructive/15 text-destructive border border-destructive/30 gap-1">
+                                <Siren className="h-3 w-3" />
+                                Emergency
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {entry.type === "appointment" ? (
+                            <div className="flex flex-col gap-0.5">
+                              <Badge variant="outline" className="gap-1 w-fit bg-primary/5 text-primary border-primary/30">
+                                <CalendarClock className="h-3 w-3" />
+                                Appointment
+                              </Badge>
+                              {entry.appointmentTime && (
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(entry.appointmentTime).toLocaleString([], {
+                                    month: "short", day: "numeric",
+                                    hour: "2-digit", minute: "2-digit",
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">Walk-in</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {new Date(entry.joinedAt).toLocaleTimeString()}
+                          {new Date(entry.joinedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </TableCell>
                         <TableCell>
                           <Select
@@ -128,6 +169,16 @@ export function QueueManagement() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant={entry.isEmergency ? "destructive" : "ghost"}
+                              onClick={() => toggleEmergency(entry.id)}
+                              aria-label={entry.isEmergency ? "Remove emergency" : "Mark as emergency"}
+                              title={entry.isEmergency ? "Remove emergency flag" : "Mark as emergency"}
+                              className={entry.isEmergency ? "opacity-80" : ""}
+                            >
+                              <Siren className="h-3.5 w-3.5" />
+                            </Button>
                             <Button
                               size="sm"
                               variant="ghost"

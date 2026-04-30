@@ -7,6 +7,7 @@ const {
   joinQueue,
   leaveQueue,
   serveNext,
+  toggleEmergency,
   updateStatus,
   reorderQueue,
   removeEntry,
@@ -39,5 +40,8 @@ router.patch("/reorder/:service_id", verifyToken, requireRole("staff", "administ
 
 //DELETE /api/queue/remove/:entryId - remove entry (staff/admin)
 router.delete("/remove/:entryId", verifyToken, requireRole("staff", "administrator"), removeEntry)
+
+//PATCH /api/queue/emergency/:entryId - toggle emergency flag (staff/admin)
+router.patch("/emergency/:entryId", verifyToken, requireRole("staff", "administrator"), toggleEmergency)
 
 module.exports = router
