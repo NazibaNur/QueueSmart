@@ -44,8 +44,9 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   status           VARCHAR(15) NOT NULL CHECK (status IN ('waiting', 'almost-ready', 'served', 'left')) DEFAULT 'waiting',
   type             VARCHAR(15) NOT NULL CHECK (type IN ('walk-in', 'appointment')) DEFAULT 'walk-in',
   is_emergency     BOOLEAN     NOT NULL DEFAULT FALSE,
-  appointment_time TIMESTAMPTZ,
-  joined_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  appointment_time           TIMESTAMPTZ,
+  appointment_reminder_sent  BOOLEAN     NOT NULL DEFAULT FALSE,
+  joined_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   served_at        TIMESTAMPTZ,
   left_at          TIMESTAMPTZ
 );
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS queue_entries (
 ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS type VARCHAR(15) NOT NULL DEFAULT 'walk-in';
 ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS is_emergency BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS appointment_time TIMESTAMPTZ;
+ALTER TABLE queue_entries ADD COLUMN IF NOT EXISTS appointment_reminder_sent BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Notifications
 CREATE TABLE IF NOT EXISTS notifications (

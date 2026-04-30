@@ -18,7 +18,7 @@ function normalizeEntry(e) {
 }
 
 //GET ALL ACTIVE QUEUE ENTRIES
-async function getQueue(req, res) {
+async function getQueue(_req, res) {
   try {
     const result = await pool.query(
       `SELECT qe.*, s.name AS service_name
@@ -205,6 +205,34 @@ async function serveNext(req, res) {
     );
 
     await createNotification(entry.user_id, "It's Your Turn", "Please proceed to the service counter.");
+
+    // Notify the next patient in line (~5 min warning)
+    const nextResult = await pool.query(
+      `SELECT qe.user_id, s.name AS service_name, s.expected_duration
+       FROM queue_entries qe
+       JOIN services s ON qe.service_id = s.id
+       WHERE qe.queue_id = $1
+         AND qe.status IN ('waiting', 'almost-ready')
+       ORDER BY
+         qe.is_emergency DESC,
+         CASE
+           WHEN qe.type = 'appointment' AND qe.appointment_time <= NOW() THEN 0
+           WHEN qe.type = 'walk-in' THEN 1
+           ELSE 2
+         END,
+         CASE WHEN qe.type = 'appointment' THEN qe.appointment_time ELSE qe.joined_at END ASC
+       LIMIT 1`,
+      [queue_id]
+    )
+    if (nextResult.rows.length > 0) {
+      const next = nextResult.rows[0]
+      const waitMin = next.expected_duration ?? 5
+      await createNotification(
+        next.user_id,
+        "You're Almost Up",
+        `You're next in line for ${next.service_name}. Estimated wait: ~${waitMin} minutes.`
+      )
+    }
 
     return res.json(normalizeEntry(entry));
   } catch (err) {
