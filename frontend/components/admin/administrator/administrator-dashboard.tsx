@@ -1,9 +1,9 @@
 "use client"
 
 import { useApp } from "@/lib/app-context"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Settings, ListOrdered, UserCog } from "lucide-react"
+import { FileText, Settings, ListOrdered, UserCog } from "lucide-react"
 import { UsageStatistics } from "./usage-statistics"
 
 export function AdministratorDashboard({ onNavigate }: { onNavigate: (view: string) => void }) {
@@ -16,14 +16,16 @@ export function AdministratorDashboard({ onNavigate }: { onNavigate: (view: stri
         <p className="text-muted-foreground mt-1">Manage services, configure priority rules, and view usage statistics.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base font-medium">Services</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => onNavigate("service-management")}>
-              <Settings className="mr-2 h-4 w-4" />
-              Manage
-            </Button>
+            <CardAction>
+              <Button size="sm" variant="outline" onClick={() => onNavigate("service-management")}>
+                <Settings className="mr-2 h-4 w-4" />
+                Manage
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">{services.length}</p>
@@ -31,12 +33,14 @@ export function AdministratorDashboard({ onNavigate }: { onNavigate: (view: stri
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base font-medium">Priority rules</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => onNavigate("priority-rules")}>
-              <ListOrdered className="mr-2 h-4 w-4" />
-              Configure
-            </Button>
+            <CardAction>
+              <Button size="sm" variant="outline" className="px-3" onClick={() => onNavigate("priority-rules")}>
+                <ListOrdered className="mr-2 h-4 w-4" />
+                Rules
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">By service</p>
@@ -44,16 +48,33 @@ export function AdministratorDashboard({ onNavigate }: { onNavigate: (view: stri
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base font-medium">Employees</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => onNavigate("employee-management")}>
-              <UserCog className="mr-2 h-4 w-4" />
-              Manage
-            </Button>
+            <CardAction>
+              <Button size="sm" variant="outline" onClick={() => onNavigate("employee-management")}>
+                <UserCog className="mr-2 h-4 w-4" />
+                Manage
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <p className="text-2xl font-bold">Staff accounts</p>
             <p className="text-xs text-muted-foreground">Assign branch, add/remove, and view login info.</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-medium">Reports</CardTitle>
+            <CardAction>
+              <Button size="sm" variant="outline" onClick={() => onNavigate("reports")}>
+                <FileText className="mr-2 h-4 w-4" />
+                Generate
+              </Button>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold">CSV</p>
+            <p className="text-xs text-muted-foreground">Export queue usage and customer history.</p>
           </CardContent>
         </Card>
       </div>

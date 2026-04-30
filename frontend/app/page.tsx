@@ -15,6 +15,7 @@ import { ServiceManagement } from "@/components/admin/administrator/service-mana
 import { QueueManagement } from "@/components/admin/staff/queue-management"
 import { PriorityRules } from "@/components/admin/administrator/priority-rules"
 import { EmployeeManagement } from "@/components/admin/administrator/employee-management"
+import { Reports } from "@/components/admin/administrator/reports"
 import { NotificationsScreen } from "@/components/notifications"
 
 function AppContent() {
@@ -74,6 +75,8 @@ function AppContent() {
         return <PriorityRules onNavigate={setCurrentView} />
       case "employee-management":
         return <EmployeeManagement />
+      case "reports":
+        return <Reports />
       // Shared
       case "notifications":
         return <NotificationsScreen />

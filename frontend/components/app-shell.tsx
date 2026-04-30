@@ -15,6 +15,7 @@ import {
   X,
   CalendarDays,
   UserCog,
+  FileText,
 } from "lucide-react"
 import { useState } from "react"
 import Image from "next/image"
@@ -50,6 +51,7 @@ export function AppShell({ children, currentView, onNavigate }: AppShellProps) {
     { id: "service-management", label: "Services", icon: Settings },
     { id: "priority-rules", label: "Priority rules", icon: ListOrdered },
     { id: "employee-management", label: "Employees", icon: UserCog },
+    { id: "reports", label: "Reports", icon: FileText },
     { id: "notifications", label: "Notifications", icon: Bell, badge: unreadCount },
   ]
 

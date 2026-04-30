@@ -69,3 +69,63 @@ export interface Appointment {
   status: "upcoming" | "completed" | "cancelled"
   createdAt: string
 }
+
+export interface ReportFilters {
+  startDate: string
+  endDate: string
+  serviceId: string | null
+}
+
+export interface ReportSummary {
+  totalCustomersServed: number
+  totalLeft: number
+  totalQueueParticipations: number
+  activeQueueCount: number
+  averageServedWaitMinutes: number
+}
+
+export interface ReportUser {
+  userId: string
+  name: string
+  email: string
+  totalParticipations: number
+  servedCount: number
+  leftCount: number
+  activeCount: number
+  lastActivityAt: string | null
+}
+
+export interface ReportHistoryEntry {
+  id: string
+  userId: string
+  customerName: string
+  customerEmail: string
+  serviceId: string
+  serviceName: string
+  status: "served" | "left"
+  joinedAt: string
+  completedAt: string
+  waitMinutes: number | null
+}
+
+export interface ReportService {
+  serviceId: string
+  name: string
+  description: string
+  expectedDuration: number
+  priority: PriorityLevel
+  isOpen: boolean
+  activeQueueCount: number
+  servedCount: number
+  leftCount: number
+  totalParticipations: number
+  averageServedWaitMinutes: number
+}
+
+export interface ReportData {
+  filters: ReportFilters
+  summary: ReportSummary
+  users: ReportUser[]
+  history: ReportHistoryEntry[]
+  services: ReportService[]
+}

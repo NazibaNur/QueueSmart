@@ -1,3 +1,5 @@
+import type { ReportData } from "@/lib/types"
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:5000/api"
 
 function getToken(): string | null {
@@ -17,6 +19,29 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     throw new Error(err.message ?? err.error ?? "Request failed")
   }
   return res.json() as Promise<T>
+}
+
+function buildQuery(params: Record<string, string | null | undefined>) {
+  const search = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) search.set(key, value)
+  })
+  const query = search.toString()
+  return query ? `?${query}` : ""
+}
+
+async function apiFetchBlob(path: string): Promise<Blob> {
+  const token = getToken()
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }))
+    throw new Error(err.message ?? err.error ?? "Request failed")
+  }
+  return res.blob()
 }
 
 export const api = {
@@ -82,5 +107,12 @@ export const api = {
   history: {
     getAll: () => apiFetch<unknown[]>("/history"),
     getMy: () => apiFetch<unknown[]>("/history/my"),
+  },
+
+  reports: {
+    get: (filters: { startDate?: string; endDate?: string; serviceId?: string | null }) =>
+      apiFetch<ReportData>(`/reports${buildQuery(filters)}`),
+    exportCsv: (filters: { startDate?: string; endDate?: string; serviceId?: string | null }) =>
+      apiFetchBlob(`/reports/export.csv${buildQuery(filters)}`),
   },
 }
