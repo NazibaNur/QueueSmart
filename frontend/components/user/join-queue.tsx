@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { Clock, Users, Zap, CalendarClock, WalkIcon } from "lucide-react"
+import { Clock, Users, Zap, CalendarClock, Footprints } from "lucide-react"
 import type { Service } from "@/lib/types"
 
 export function JoinQueueScreen({ onNavigate }: { onNavigate: (view: string) => void }) {
@@ -168,7 +168,7 @@ export function JoinQueueScreen({ onNavigate }: { onNavigate: (view: string) => 
                     : "border-border text-muted-foreground hover:border-primary/40"
                 }`}
               >
-                <WalkIcon className="h-6 w-6" />
+                <Footprints className="h-6 w-6" />
                 <span className="text-sm font-medium">Walk-in</span>
                 <span className="text-xs text-center">Join queue now, served by arrival order</span>
               </button>
