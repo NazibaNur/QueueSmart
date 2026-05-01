@@ -1,6 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useApp } from "@/lib/app-context"
+import { api } from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,8 +10,28 @@ import { Progress } from "@/components/ui/progress"
 import { Clock, MapPin, AlertCircle } from "lucide-react"
 
 export function QueueStatusScreen({ onNavigate }: { onNavigate: (view: string) => void }) {
-  const { getUserQueueEntry, getServiceById, getQueueForService, leaveQueue } = useApp()
+  const { getUserQueueEntry, getServiceById, leaveQueue, refreshQueue } = useApp()
   const entry = getUserQueueEntry()
+  const [totalInQueue, setTotalInQueue] = useState<number>(0)
+
+  useEffect(() => {
+    if (!entry) return
+    let active = true
+    const serviceId = entry.serviceId
+
+    const refresh = async () => {
+      await refreshQueue()
+      if (!active) return
+      api.queue.getWaitTime(serviceId)
+        .then((data) => { if (active) setTotalInQueue(data.position) })
+        .catch(() => {})
+    }
+
+    refresh()
+    const interval = setInterval(refresh, 10000)
+    return () => { active = false; clearInterval(interval) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry?.serviceId])
 
   if (!entry) {
     return (
@@ -37,8 +59,6 @@ export function QueueStatusScreen({ onNavigate }: { onNavigate: (view: string) =
   }
 
   const service = getServiceById(entry.serviceId)
-  const queue = getQueueForService(entry.serviceId)
-  const totalInQueue = queue.length
   const estimatedWait = (service?.expectedDuration ?? 15) * entry.position
 
   const statusLabels: Record<string, string> = {

@@ -8,7 +8,7 @@ function normalizeEntry(e) {
     serviceId: e.service_id,
     serviceName: e.service_name,
     userId: e.user_id,
-    position: e.position,
+    position: parseInt(e.computed_position ?? e.position, 10),
     status: e.status,
     type: e.type ?? "walk-in",
     isEmergency: e.is_emergency ?? false,
@@ -17,21 +17,26 @@ function normalizeEntry(e) {
   }
 }
 
+
 //GET ALL ACTIVE QUEUE ENTRIES
 async function getQueue(_req, res) {
   try {
     const result = await pool.query(
-      `SELECT qe.*, s.name AS service_name
+      `SELECT qe.*, s.name AS service_name,
+         (SELECT COUNT(*) + 1
+          FROM queue_entries q2
+          WHERE q2.queue_id = qe.queue_id
+            AND q2.status IN ('waiting', 'almost-ready')
+            AND q2.id != qe.id
+            AND (
+              q2.is_emergency > qe.is_emergency
+              OR (q2.is_emergency = qe.is_emergency AND q2.joined_at < qe.joined_at)
+            )
+         ) AS computed_position
        FROM queue_entries qe
        JOIN services s ON qe.service_id = s.id
        WHERE qe.status IN ('waiting', 'almost-ready')
-       ORDER BY qe.is_emergency DESC,
-         CASE
-           WHEN qe.type = 'appointment' AND qe.appointment_time <= NOW() THEN 0
-           WHEN qe.type = 'walk-in' THEN 1
-           ELSE 2
-         END,
-         CASE WHEN qe.type = 'appointment' THEN qe.appointment_time ELSE qe.joined_at END ASC`
+       ORDER BY qe.queue_id, computed_position ASC`
     );
     res.json(result.rows.map(normalizeEntry));
   } catch (err) {
@@ -82,9 +87,10 @@ async function joinQueue(req, res) {
     const queue_id = queueResult.rows[0].id;
 
     const positionResult = await pool.query(
-      `SELECT COALESCE(MAX(position), 0) + 1 AS next_pos
+      `SELECT COUNT(*) + 1 AS next_pos
        FROM queue_entries
-       WHERE queue_id = $1`,
+       WHERE queue_id = $1
+         AND status IN ('waiting', 'almost-ready')`,
       [queue_id]
     );
 
@@ -144,16 +150,6 @@ async function leaveQueue(req, res) {
     }
 
     const entry = result.rows[0];
-
-    // Shift positions of everyone behind the leaving user
-    await pool.query(
-      `UPDATE queue_entries
-       SET position = position - 1
-       WHERE queue_id = $1
-         AND position > $2
-         AND status IN ('waiting', 'almost-ready')`,
-      [queue_id, entry.position]
-    );
 
     await pool.query(
       `INSERT INTO history (user_id, service_id, status, joined_at, left_at) VALUES ($1, $2, 'left', $3, NOW())`,
@@ -288,11 +284,20 @@ async function getUserQueue(req, res) {
     const user_id = req.user.id;
 
     const result = await pool.query(
-      `SELECT qe.*, s.name AS service_name
+      `SELECT qe.*, s.name AS service_name,
+         (SELECT COUNT(*) + 1
+          FROM queue_entries q2
+          WHERE q2.queue_id = qe.queue_id
+            AND q2.status IN ('waiting', 'almost-ready')
+            AND q2.id != qe.id
+            AND (
+              q2.is_emergency > qe.is_emergency
+              OR (q2.is_emergency = qe.is_emergency AND q2.joined_at < qe.joined_at)
+            )
+         ) AS computed_position
        FROM queue_entries qe
        JOIN services s ON qe.service_id = s.id
-       WHERE qe.user_id = $1
-       AND qe.status IN ('waiting', 'almost-ready')
+       WHERE qe.user_id = $1 AND qe.status IN ('waiting', 'almost-ready')
        ORDER BY qe.joined_at ASC`,
       [user_id]
     );

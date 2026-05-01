@@ -1,32 +1,45 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useApp } from "@/lib/app-context"
+import { api } from "@/lib/api"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
 import { Clock, Users, Zap, CalendarClock, Footprints } from "lucide-react"
-import type { Service } from "@/lib/types"
+import type { Appointment, Service } from "@/lib/types"
 
 export function JoinQueueScreen({ onNavigate }: { onNavigate: (view: string) => void }) {
-  const { services, queueEntries, joinQueue, getUserQueueEntry } = useApp()
+  const { services, joinQueue, getUserQueueEntry, getUserAppointments } = useApp()
   const currentEntry = getUserQueueEntry()
   const openServices = services.filter((s) => s.isOpen)
 
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [joinType, setJoinType] = useState<"walk-in" | "appointment">("walk-in")
-  const [appointmentDate, setAppointmentDate] = useState("")
-  const [appointmentTime, setAppointmentTime] = useState("")
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
+  const [queueCounts, setQueueCounts] = useState<Record<string, number>>({})
+
+  const todayStr = new Date().toISOString().split("T")[0]
+
+  useEffect(() => {
+    if (openServices.length === 0) return
+    Promise.all(
+      openServices.map((s) =>
+        api.queue.getWaitTime(s.id)
+          .then((data) => ({ id: s.id, count: data.position }))
+          .catch(() => ({ id: s.id, count: 0 }))
+      )
+    ).then((results) => {
+      const map: Record<string, number> = {}
+      results.forEach((r) => { map[r.id] = r.count })
+      setQueueCounts(map)
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openServices.length])
 
   function getQueueLength(serviceId: string) {
-    return queueEntries.filter(
-      (e) => e.serviceId === serviceId && (e.status === "waiting" || e.status === "almost-ready")
-    ).length
+    return queueCounts[serviceId] ?? 0
   }
 
   function getEstimatedWait(serviceId: string) {
@@ -46,38 +59,32 @@ export function JoinQueueScreen({ onNavigate }: { onNavigate: (view: string) => 
   function openDialog(service: Service) {
     setSelectedService(service)
     setJoinType("walk-in")
-    setAppointmentDate("")
-    setAppointmentTime("")
-    setError("")
   }
 
-  async function handleConfirm() {
+  const todayAppointments: Appointment[] = selectedService
+    ? getUserAppointments().filter(
+        (a) => a.serviceId === selectedService.id && a.date === todayStr && a.status === "upcoming"
+      )
+    : []
+
+  async function handleWalkIn() {
     if (!selectedService) return
-    setError("")
-
-    if (joinType === "appointment") {
-      if (!appointmentDate || !appointmentTime) {
-        setError("Please select both date and time for your appointment.")
-        return
-      }
-      const dt = new Date(`${appointmentDate}T${appointmentTime}`)
-      if (isNaN(dt.getTime())) {
-        setError("Invalid date or time.")
-        return
-      }
-    }
-
     setLoading(true)
-    const appointmentISO =
-      joinType === "appointment" ? new Date(`${appointmentDate}T${appointmentTime}`).toISOString() : undefined
-
-    await joinQueue(selectedService.id, joinType, appointmentISO)
+    await joinQueue(selectedService.id, "walk-in")
     setLoading(false)
     setSelectedService(null)
     onNavigate("queue-status")
   }
 
-  const todayStr = new Date().toISOString().split("T")[0]
+  async function handleCheckIn(appt: Appointment) {
+    if (!selectedService) return
+    setLoading(true)
+    const appointmentISO = new Date(`${appt.date}T${appt.time}`).toISOString()
+    await joinQueue(selectedService.id, "appointment", appointmentISO)
+    setLoading(false)
+    setSelectedService(null)
+    onNavigate("queue-status")
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -153,7 +160,7 @@ export function JoinQueueScreen({ onNavigate }: { onNavigate: (view: string) => 
       <Dialog open={!!selectedService} onOpenChange={(open) => { if (!open) setSelectedService(null) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Join — {selectedService?.name}</DialogTitle>
+            <DialogTitle>Join - {selectedService?.name}</DialogTitle>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 py-2">
@@ -183,43 +190,60 @@ export function JoinQueueScreen({ onNavigate }: { onNavigate: (view: string) => 
               >
                 <CalendarClock className="h-6 w-6" />
                 <span className="text-sm font-medium">Appointment</span>
-                <span className="text-xs text-center">Reserve a time slot, served at scheduled time</span>
+                <span className="text-xs text-center">Check in with a scheduled appointment</span>
               </button>
             </div>
 
-            {/* Appointment date/time picker */}
+            {/* Appointment panel */}
             {joinType === "appointment" && (
-              <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="appt-date">Date</Label>
-                  <Input
-                    id="appt-date"
-                    type="date"
-                    min={todayStr}
-                    value={appointmentDate}
-                    onChange={(e) => setAppointmentDate(e.target.value)}
-                  />
+              todayAppointments.length === 0 ? (
+                <div className="flex flex-col items-center gap-3 rounded-lg bg-muted/40 p-5 text-center">
+                  <CalendarClock className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">You have no appointments for today.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedService(null)
+                      onNavigate("schedule")
+                    }}
+                  >
+                    Go to Schedule
+                  </Button>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="appt-time">Time</Label>
-                  <Input
-                    id="appt-time"
-                    type="time"
-                    value={appointmentTime}
-                    onChange={(e) => setAppointmentTime(e.target.value)}
-                  />
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    Today's appointments
+                  </p>
+                  {todayAppointments.map((appt) => (
+                    <div
+                      key={appt.id}
+                      className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">{selectedService?.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {appt.time} - {appt.duration} min
+                        </span>
+                      </div>
+                      <Button size="sm" disabled={loading} onClick={() => handleCheckIn(appt)}>
+                        {loading ? "Checking in..." : "Check In"}
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              )
             )}
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedService(null)}>Cancel</Button>
-            <Button onClick={handleConfirm} disabled={loading}>
-              {loading ? "Joining…" : "Confirm"}
-            </Button>
+            {joinType === "walk-in" && (
+              <Button onClick={handleWalkIn} disabled={loading}>
+                {loading ? "Joining..." : "Confirm"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

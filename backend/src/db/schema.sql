@@ -67,6 +67,19 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+-- Appointments
+CREATE TABLE IF NOT EXISTS appointments (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES user_credentials(id) ON DELETE CASCADE,
+  service_id  UUID        NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  date        DATE        NOT NULL,
+  time        TIME        NOT NULL,
+  duration    INTEGER     NOT NULL DEFAULT 30,
+  status      VARCHAR(15) NOT NULL CHECK (status IN ('upcoming', 'completed', 'cancelled')) DEFAULT 'upcoming',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (service_id, date, time)
+);
+
 -- History
 CREATE TABLE IF NOT EXISTS history (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

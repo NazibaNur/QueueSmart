@@ -36,7 +36,7 @@ const MONTH_NAMES = [
 ]
 
 export function ScheduleAppointment() {
-  const { services, bookAppointment, getUserAppointments, getServiceById } = useApp()
+  const { services, bookAppointment, cancelAppointment, getUserAppointments, getServiceById } = useApp()
 
   const openServices = services.filter((s) => s.isOpen)
   const userAppointments = getUserAppointments()
@@ -49,6 +49,7 @@ export function ScheduleAppointment() {
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [selectedServiceId, setSelectedServiceId] = useState<string>(openServices[0]?.id ?? "")
   const [booked, setBooked] = useState(false)
+  const [booking, setBooking] = useState(false)
 
   const selectedService = getServiceById(selectedServiceId)
 
@@ -104,10 +105,12 @@ export function ScheduleAppointment() {
     ? `${selectedDate} ${MONTH_NAMES[currentMonth].slice(0, 3)}, ${currentYear}`
     : null
 
-  function handleBook() {
+  async function handleBook() {
     if (!selectedDate || !selectedTime || !selectedServiceId) return
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(selectedDate).padStart(2, "0")}`
-    bookAppointment(selectedServiceId, dateStr, selectedTime)
+    setBooking(true)
+    await bookAppointment(selectedServiceId, dateStr, selectedTime)
+    setBooking(false)
     setBooked(true)
   }
 
@@ -371,11 +374,11 @@ export function ScheduleAppointment() {
 
                 <Button
                   onClick={handleBook}
-                  disabled={!selectedDate || !selectedTime || !selectedServiceId}
+                  disabled={!selectedDate || !selectedTime || !selectedServiceId || booking}
                   className="mt-6 w-full"
                   size="lg"
                 >
-                  Book appointment
+                  {booking ? "Booking..." : "Book appointment"}
                 </Button>
               </>
             )}
@@ -410,9 +413,14 @@ export function ScheduleAppointment() {
                         </span>
                       </div>
                     </div>
-                    <Badge className="bg-primary/10 text-primary border border-primary/20 text-xs shrink-0">
-                      Upcoming
-                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10 text-xs h-7 px-2"
+                      onClick={() => cancelAppointment(apt.id)}
+                    >
+                      Cancel
+                    </Button>
                   </CardContent>
                 </Card>
               )

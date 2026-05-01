@@ -7,6 +7,7 @@ const queueRoutes = require("./routes/queue.routes")
 const notificationsRoutes = require("./routes/notifications.routes")
 const historyRoutes = require("./routes/history.routes")
 const reportsRoutes = require("./routes/reports.routes")
+const appointmentsRoutes = require("./routes/appointments.routes")
 
 const app = express()
 
@@ -20,6 +21,7 @@ app.use("/api/queue", queueRoutes)
 app.use("/api/notifications", notificationsRoutes)
 app.use("/api/history", historyRoutes)
 app.use("/api/reports", reportsRoutes)
+app.use("/api/appointments", appointmentsRoutes)
 
 // Health check
 app.get("/api/health", (req, res) => {

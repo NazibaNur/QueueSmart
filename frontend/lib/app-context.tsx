@@ -24,6 +24,7 @@ interface AppContextType {
   register: (email: string, password: string, name: string, role: "user" | "staff" | "administrator") => Promise<{ success: boolean; error?: string }>
   logout: () => void
   joinQueue: (serviceId: string, type?: "walk-in" | "appointment", appointmentTime?: string) => Promise<void>
+  refreshQueue: () => Promise<void>
   toggleEmergency: (entryId: string) => Promise<void>
   leaveQueue: (entryId: string) => Promise<void>
   createService: (service: Omit<Service, "id" | "createdAt" | "isOpen">) => Promise<void>
@@ -35,8 +36,8 @@ interface AppContextType {
   reorderQueue: (serviceId: string, entryId: string, direction: "up" | "down") => Promise<void>
   markNotificationRead: (notificationId: string) => Promise<void>
   markAllNotificationsRead: () => Promise<void>
-  bookAppointment: (serviceId: string, date: string, time: string) => void
-  cancelAppointment: (appointmentId: string) => void
+  bookAppointment: (serviceId: string, date: string, time: string) => Promise<void>
+  cancelAppointment: (appointmentId: string) => Promise<void>
   getUserAppointments: () => Appointment[]
   getQueueForService: (serviceId: string) => QueueEntry[]
   getUserQueueEntry: () => QueueEntry | undefined
@@ -103,7 +104,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.log("[fetchQueue] getMy returned:", entries)
         setQueueEntries(Array.isArray(entries) ? entries : [])
       }
-    } catch { /* ignore */ }
+    } catch (err) {
+    console.error("[fetchQueue] failed:", err)
+  }
   }, [])
 
   const fetchNotifications = useCallback(async () => {
@@ -122,9 +125,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore */ }
   }, [])
 
+  const fetchAppointments = useCallback(async () => {
+    try {
+      const data = await api.appointments.getMy() as Appointment[]
+      setAppointments(data)
+    } catch { /* ignore */ }
+  }, [])
+
   const refreshAll = useCallback(async (user: User, svcs: Service[]) => {
-    await Promise.all([fetchQueue(user), fetchNotifications(), fetchHistory(user, svcs)])
-  }, [fetchQueue, fetchNotifications, fetchHistory])
+    await Promise.all([fetchQueue(user), fetchNotifications(), fetchHistory(user, svcs), fetchAppointments()])
+  }, [fetchQueue, fetchNotifications, fetchHistory, fetchAppointments])
 
   // ─── On mount: restore session ────────────────────────────────────────────
 
@@ -138,6 +148,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fetchServices().then((svcs: Service[]) => refreshAll(user, svcs))
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const handleAuthExpired = () => {
+      setCurrentUser(null)
+      setQueueEntries([])
+      setNotifications([])
+      setHistory([])
+      setAppointments([])
+    }
+    window.addEventListener("auth:expired", handleAuthExpired)
+    return () => window.removeEventListener("auth:expired", handleAuthExpired)
   }, [])
 
   // ─── Auth ─────────────────────────────────────────────────────────────────
@@ -198,6 +221,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       alert((err as Error).message ?? "Failed to join queue")
     }
   }, [currentUser, fetchQueue, fetchNotifications])
+
+  const refreshQueue = useCallback(async () => {
+    if (!currentUser) return
+    await fetchQueue(currentUser)
+  }, [currentUser, fetchQueue])
 
   const toggleEmergency = useCallback(async (entryId: string) => {
     if (!currentUser) return
@@ -281,31 +309,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await fetchNotifications()
   }, [fetchNotifications])
 
-  // ─── Appointments (local only — no backend) ───────────────────────────────
+  // ─── Appointments ─────────────────────────────────────────────────────────
 
-  const bookAppointment = useCallback((serviceId: string, date: string, time: string) => {
+  const bookAppointment = useCallback(async (serviceId: string, date: string, time: string) => {
     if (!currentUser) return
-    const service = services.find((s: Service) => s.id === serviceId)
-    setAppointments((prev: Appointment[]) => [
-      ...prev,
-      {
-        id: `apt-${generateId()}`,
-        userId: currentUser.id,
-        serviceId,
-        date,
-        time,
-        duration: service?.expectedDuration ?? 30,
-        status: "upcoming" as const,
-        createdAt: new Date().toISOString(),
-      },
-    ])
-  }, [currentUser, services])
+    try {
+      await api.appointments.create(serviceId, date, time)
+      await fetchAppointments()
+    } catch (err) {
+      alert((err as Error).message ?? "Failed to book appointment")
+    }
+  }, [currentUser, fetchAppointments])
 
-  const cancelAppointment = useCallback((appointmentId: string) => {
-    setAppointments((prev: Appointment[]) =>
-      prev.map((a: Appointment) => (a.id === appointmentId ? { ...a, status: "cancelled" as const } : a))
-    )
-  }, [])
+  const cancelAppointment = useCallback(async (appointmentId: string) => {
+    try {
+      await api.appointments.cancel(appointmentId)
+      await fetchAppointments()
+    } catch (err) {
+      alert((err as Error).message ?? "Failed to cancel appointment")
+    }
+  }, [fetchAppointments])
 
   const getUserAppointments = useCallback(() => {
     if (!currentUser) return []
@@ -403,6 +426,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         register,
         logout,
         joinQueue,
+        refreshQueue,
         toggleEmergency,
         leaveQueue,
         createService,

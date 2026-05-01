@@ -15,6 +15,14 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
   if (!res.ok) {
+    if (res.status === 401) {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("token")
+        localStorage.removeItem("user")
+        window.dispatchEvent(new Event("auth:expired"))
+      }
+      throw new Error("Session expired. Please log in again.")
+    }
     const err = await res.json().catch(() => ({ message: res.statusText }))
     throw new Error(err.message ?? err.error ?? "Request failed")
   }
@@ -71,6 +79,8 @@ export const api = {
   queue: {
     getAll: () => apiFetch<unknown[]>("/queue"),
     getMy: () => apiFetch<unknown | null>("/queue/my"),
+    getWaitTime: (serviceId: string) =>
+      apiFetch<{ service_id: string; position: number; estimatedMinutes: number }>(`/queue/wait-time/${serviceId}`),
     join: (serviceId: string, type: "walk-in" | "appointment" = "walk-in", appointmentTime?: string) =>
       apiFetch<unknown>("/queue/join", {
         method: "POST",
@@ -107,6 +117,18 @@ export const api = {
   history: {
     getAll: () => apiFetch<unknown[]>("/history"),
     getMy: () => apiFetch<unknown[]>("/history/my"),
+  },
+
+  appointments: {
+    getAll: () => apiFetch<unknown[]>("/appointments"),
+    getMy: () => apiFetch<unknown[]>("/appointments/my"),
+    create: (serviceId: string, date: string, time: string) =>
+      apiFetch<unknown>("/appointments", {
+        method: "POST",
+        body: JSON.stringify({ service_id: serviceId, date, time }),
+      }),
+    cancel: (id: string) =>
+      apiFetch<unknown>(`/appointments/${id}/cancel`, { method: "PATCH" }),
   },
 
   reports: {
