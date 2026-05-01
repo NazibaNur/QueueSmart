@@ -144,6 +144,17 @@ async function leaveQueue(req, res) {
     }
 
     const entry = result.rows[0];
+
+    // Shift positions of everyone behind the leaving user
+    await pool.query(
+      `UPDATE queue_entries
+       SET position = position - 1
+       WHERE queue_id = $1
+         AND position > $2
+         AND status IN ('waiting', 'almost-ready')`,
+      [queue_id, entry.position]
+    );
+
     await pool.query(
       `INSERT INTO history (user_id, service_id, status, joined_at, left_at) VALUES ($1, $2, 'left', $3, NOW())`,
       [entry.user_id, entry.service_id, entry.joined_at]
