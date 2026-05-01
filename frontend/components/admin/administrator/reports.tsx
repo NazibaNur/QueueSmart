@@ -15,6 +15,12 @@ import { BarChart3, Clock, Download, FileText, RefreshCw, Users } from "lucide-r
 
 const ALL_SERVICES = "all"
 
+type ReportFilterValues = {
+  startDate: string
+  endDate: string
+  serviceId: string
+}
+
 function dateInputValue(date: Date) {
   return date.toISOString().slice(0, 10)
 }
@@ -26,6 +32,14 @@ function defaultDateRange() {
   return {
     startDate: dateInputValue(start),
     endDate: dateInputValue(end),
+  }
+}
+
+function buildApiFilters(values: ReportFilterValues) {
+  return {
+    startDate: `${values.startDate}T00:00:00.000`,
+    endDate: `${values.endDate}T23:59:59.999`,
+    serviceId: values.serviceId === ALL_SERVICES ? null : values.serviceId,
   }
 }
 
@@ -56,15 +70,14 @@ export function Reports() {
   const [loading, setLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [appliedFilters, setAppliedFilters] = useState<ReportFilterValues>({
+    startDate: initialRange.startDate,
+    endDate: initialRange.endDate,
+    serviceId: ALL_SERVICES,
+  })
 
-  const filters = useMemo(() => ({
-    startDate: `${startDate}T00:00:00.000`,
-    endDate: `${endDate}T23:59:59.999`,
-    serviceId: serviceId === ALL_SERVICES ? null : serviceId,
-  }), [startDate, endDate, serviceId])
-
-  const loadReport = useCallback(async () => {
-    if (!startDate || !endDate) {
+  const loadReport = useCallback(async (values: ReportFilterValues) => {
+    if (!values.startDate || !values.endDate) {
       setError("Select both start and end dates.")
       return
     }
@@ -72,28 +85,49 @@ export function Reports() {
     setLoading(true)
     setError(null)
     try {
+      const filters = buildApiFilters(values)
       const data = await api.reports.get(filters)
       setReport(data)
+      setAppliedFilters(values)
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [endDate, filters, startDate])
+  }, [])
 
   useEffect(() => {
-    loadReport()
-  }, [loadReport])
+    loadReport({
+      startDate: initialRange.startDate,
+      endDate: initialRange.endDate,
+      serviceId: ALL_SERVICES,
+    })
+  }, [initialRange.endDate, initialRange.startDate, loadReport])
+
+  function generateReport() {
+    loadReport({ startDate, endDate, serviceId })
+  }
+
+  const hasPendingFilterChanges =
+    startDate !== appliedFilters.startDate ||
+    endDate !== appliedFilters.endDate ||
+    serviceId !== appliedFilters.serviceId
+
+  const appliedApiFilters = useMemo(() => buildApiFilters(appliedFilters), [appliedFilters])
+
+  const appliedServiceLabel = appliedFilters.serviceId === ALL_SERVICES
+    ? "All services"
+    : services.find((service) => service.id === appliedFilters.serviceId)?.name ?? "Selected service"
 
   async function exportCsv() {
     setExporting(true)
     setError(null)
     try {
-      const blob = await api.reports.exportCsv(filters)
+      const blob = await api.reports.exportCsv(appliedApiFilters)
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `queuesmart-report-${startDate}-to-${endDate}.csv`
+      link.download = `queuesmart-report-${appliedFilters.startDate}-to-${appliedFilters.endDate}.csv`
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -123,7 +157,7 @@ export function Reports() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Report Filters</CardTitle>
-          <CardDescription>Choose a date range and service, then refresh the report.</CardDescription>
+          <CardDescription>Choose a date range and service, then generate the report.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-[1fr_1fr_1.4fr_auto] md:items-end">
@@ -151,11 +185,17 @@ export function Reports() {
                 </SelectContent>
               </Select>
             </div>
-            <Button onClick={loadReport} disabled={loading}>
+            <Button onClick={generateReport} disabled={loading}>
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Generate
             </Button>
           </div>
+          {report ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Showing {appliedServiceLabel} from {appliedFilters.startDate} to {appliedFilters.endDate}.
+              {hasPendingFilterChanges ? " Filter changes are not applied yet." : ""}
+            </p>
+          ) : null}
           {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}
         </CardContent>
       </Card>
